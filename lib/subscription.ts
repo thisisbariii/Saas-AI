@@ -1,41 +1,44 @@
-import { auth } from "@clerk/nextjs";
+import prisma from "@/lib/prismadb";
 
-import prismadb from "@/lib/prismadb";
+const ONE_DAY_IN_MS = 86_400_000;
 
-const DAY_IN_MS = 86_400_000;
-
-export const checkSubscription = async () => {
-  const { userId } = auth();
-  console.log("userid: ", userId);
-
+export const checkSubscription = async (userId: string) => {
   if (!userId) {
-    console.log("Not a User");
+    console.error("checkSubscription: No userId provided");
     return false;
   }
 
-  const userSubscription = await prismadb.userSubscription.findUnique({
-    where: {
-      userId: userId,
-    },
-    select: {
-      stripeSubscriptionId: true,
-      stripeCurrentPeriodEnd: true,
-      stripeCustomerId: true,
-      stripePriceId: true,
-    },
-  })
+  try {
+    const userSubscription = await prisma.userSubscription.findUnique({
+      where: { userId },
+      select: {
+        stripeSubscriptionId: true,
+        stripeCurrentPeriodEnd: true,
+        stripePriceId: true,
+        stripeCustomerId: true,
+      },
+    });
 
-  if (!userSubscription) {
-    console.log("User Subscription: ", userSubscription);
-    console.log("Subscription False")
+    if (!userSubscription) {
+      console.log(`No subscription found for user ${userId}`);
+      return false;
+    }
+
+    // Check if stripeCurrentPeriodEnd is valid
+    if (!userSubscription.stripeCurrentPeriodEnd) {
+      console.error(`Invalid subscription period end for user ${userId}`);
+      return false;
+    }
+
+    const currentPeriodEnd = userSubscription.stripeCurrentPeriodEnd.getTime();
+    const isValid = userSubscription.stripePriceId && currentPeriodEnd + ONE_DAY_IN_MS > Date.now();
+
+    console.log(`Subscription validity for ${userId}: ${isValid}`);
+    console.log(`Current period end: ${new Date(currentPeriodEnd).toLocaleString()}`);
+    
+    return isValid;
+  } catch (error) {
+    console.error("Error checking subscription for user " + userId + ":", error);
     return false;
-  } 
-
-  const isValid =
-    userSubscription.stripePriceId &&
-    userSubscription.stripeCurrentPeriodEnd?.getTime()! + DAY_IN_MS > Date.now()
-  
-  console.log("IsValid: ", isValid);
-
-  return !!isValid;
+  }
 };

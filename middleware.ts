@@ -1,9 +1,13 @@
 import { authMiddleware } from "@clerk/nextjs";
 
 export default authMiddleware({
-  publicRoutes: ["/", "/api/webhook"],
+  publicRoutes: ["/", "/about", "/contact", "/api/webhook", "/dashboard"], // ✅ Added "/dashboard"
 });
 
 export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: [
+    "/((?!.*\\..*|_next).*)", // Middleware for all non-static routes
+    "/(api|trpc)(.*)",        // Include API routes
+    "/",                      // Include root
+  ],
 };

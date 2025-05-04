@@ -41,12 +41,17 @@ const PhotoPage = () => {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setPhotos([]);
-
-      const response = await axios.post('/api/image', values);
-
-      const urls = response.data.map((image: { url: string }) => image.url);
-
-      setPhotos(urls);
+  
+      const response = await axios.post('/api/image', values, {
+        responseType: 'arraybuffer',
+      });
+  
+      const blob = new Blob([response.data], { type: 'image/png' });
+      const imageUrl = URL.createObjectURL(blob);
+  
+      console.log("🖼️ Image URL:", imageUrl); // optional for debugging
+  
+      setPhotos([imageUrl]);
     } catch (error: any) {
       if (error?.response?.status === 403) {
         proModal.onOpen();
@@ -57,6 +62,7 @@ const PhotoPage = () => {
       router.refresh();
     }
   }
+  
 
   return ( 
     <div>

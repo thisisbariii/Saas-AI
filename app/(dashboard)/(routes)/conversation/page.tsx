@@ -7,8 +7,7 @@ import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
-// import { ChatCompletionRequestMessage } from "openai";
- 
+
 import { BotAvatar } from "@/components/bot-avatar";
 import { Heading } from "@/components/heading";
 import { Button } from "@/components/ui/button";
@@ -23,15 +22,15 @@ import { useProModal } from "@/hooks/use-pro-modal";
 
 import { formSchema } from "./constants";
 
-interface ChatCompletionRequestMessage {
-  role: string; // Define the role property
-  content: string; // Assuming content is a string, adjust the type if necessary
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 const ConversationPage = () => {
   const router = useRouter();
   const proModal = useProModal();
-  const [messages, setMessages] = useState<ChatCompletionRequestMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -44,23 +43,47 @@ const ConversationPage = () => {
   
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      const userMessage: ChatCompletionRequestMessage = { role: "user", content: values.prompt };
-      const newMessages = [...messages, userMessage];
+      const userMessage: ChatMessage = { 
+        role: "user", 
+        content: values.prompt 
+      };
       
-      const response = await axios.post('/api/conversation', { messages: newMessages });
-      setMessages((current) => [...current, userMessage, response.data]);
+      // Add user message immediately
+      setMessages(current => [...current, userMessage]);
       
+      // Show typing indicator
+      setMessages(current => [...current, { role: "assistant", content: "..." }]);
+
+      const response = await axios.post('/api/conversation', { 
+        messages: [...messages, userMessage] 
+      });
+      
+      console.log("API Response:", response.data);
+
+      // Remove typing indicator and add actual response
+      setMessages(current => [
+        ...current.filter(msg => msg.content !== "..."),
+        {
+          role: "assistant",
+          content: response.data.content || response.data.message || "No response from AI"
+        }
+      ]);
+
       form.reset();
     } catch (error: any) {
+      // Remove typing indicator on error
+      setMessages(current => current.filter(msg => msg.content !== "..."));
+      
+      console.error("API Error:", error);
       if (error?.response?.status === 403) {
         proModal.onOpen();
       } else {
-        toast.error("Something went wrong.");
+        toast.error(error.response?.data?.error || "Something went wrong.");
       }
     } finally {
       router.refresh();
     }
-  }
+  };
 
   return ( 
     <div>
@@ -76,18 +99,7 @@ const ConversationPage = () => {
           <Form {...form}>
             <form 
               onSubmit={form.handleSubmit(onSubmit)} 
-              className="
-                rounded-lg 
-                border 
-                w-full 
-                p-4 
-                px-3 
-                md:px-6 
-                focus-within:shadow-sm
-                grid
-                grid-cols-12
-                gap-2
-              "
+              className="rounded-lg border w-full p-4 px-3 md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
             >
               <FormField
                 name="prompt"
@@ -111,7 +123,7 @@ const ConversationPage = () => {
           </Form>
         </div>
         <div className="space-y-4 mt-4">
-          {isLoading && (
+          {isLoading && messages[messages.length - 1]?.content === "..." && (
             <div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
               <Loader />
             </div>
@@ -120,17 +132,17 @@ const ConversationPage = () => {
             <Empty label="No conversation started." />
           )}
           <div className="flex flex-col-reverse gap-y-4">
-            {messages.map((message) => (
+            {messages.filter(msg => msg.content !== "...").map((message, index) => (
               <div 
-                key={message.content} 
+                key={index} 
                 className={cn(
                   "p-8 w-full flex items-start gap-x-8 rounded-lg",
                   message.role === "user" ? "bg-white border border-black/10" : "bg-muted",
                 )}
               >
                 {message.role === "user" ? <UserAvatar /> : <BotAvatar />}
-                <p className="text-sm">
-                  {message.content}
+                <p className="text-sm whitespace-pre-wrap">
+                  <strong>{message.role === "user" ? "You:" : "Bot:"}</strong> {message.content}
                 </p>
               </div>
             ))}
@@ -138,8 +150,7 @@ const ConversationPage = () => {
         </div>
       </div>
     </div>
-   );
-}
- 
-export default ConversationPage;
+  );
+};
 
+export default ConversationPage;
